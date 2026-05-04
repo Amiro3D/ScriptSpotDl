@@ -1,0 +1,47 @@
+name: Audio Download & Release
+
+on:
+  repository_dispatch:
+    types: [download-song]          # ← our event type
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup yt-dlp
+        uses: AnimMouse/setup-yt-dlp@v3
+
+      - name: Search & download best audio
+        id: download
+        run: |
+          QUERY="${{ github.event.client_payload.query }}"
+          REQUEST_ID="${{ github.event.client_payload.request_id }}"
+
+          # Search YouTube, pick first result, download best audio, convert to mp3
+          # yt-dlp will automatically use cookies.txt if it exists in the repo
+          yt-dlp \
+            "ytsearch1:${QUERY}" \
+            --format bestaudio \
+            --extract-audio \
+            --audio-format mp3 \
+            --audio-quality 0 \
+            --output "${REQUEST_ID}.%(ext)s" \
+            --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+          echo "filename=${REQUEST_ID}.mp3" >> $GITHUB_OUTPUT
+
+      - name: Create Release with exact tag
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: "${{ github.event.client_payload.request_id }}"
+          name: "Download: ${{ github.event.client_payload.query }}"
+          files: "${{ steps.download.outputs.filename }}"
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,33 @@
+name: Spotify Download
+
+on:
+  repository_dispatch:
+    types: [download-music]
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install spotdl
+        run: pip install spotdl
+
+      - name: Download from Spotify
+        run: spotdl download "${{ github.event.client_payload.spotify_url }}"
+
+      - name: Upload music as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-music
+          path: ./*.mp3

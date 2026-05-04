@@ -1,11 +1,11 @@
-name: Spotify Download
+name: Full Track Download & Drive Upload
 
 on:
   repository_dispatch:
     types: [download-music]
 
 jobs:
-  download:
+  download-and-upload:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,14 +20,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - name: Install spotdl
-        run: pip install spotdl
+      - name: Install ytmdl
+        run: |
+          pip install ytmdl
+          pip install --upgrade yt-dlp
 
-      - name: Download from Spotify
-        run: spotdl download "${{ github.event.client_payload.spotify_url }}"
+      - name: Download track from YouTube with iTunes metadata
+        run: ytmdl "${{ github.event.client_payload.search_query }}" --output-format mp3
 
-      - name: Upload music as artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload to Google Drive
+        uses: adityak74/google-drive-upload-git-action@v1
         with:
-          name: my-music
-          path: ./*.mp3
+          credentials: ${{ secrets.DRIVE_SERVICE_JSON }}
+          filename: "*.mp3"
+          folderId: ${{ secrets.DRIVE_FOLDER_ID }}
+          name: "${{ github.event.client_payload.search_query }}.mp3"
+          overwrite: "true"

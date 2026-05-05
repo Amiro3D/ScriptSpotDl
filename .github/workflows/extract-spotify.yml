@@ -10,37 +10,37 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout repository (brings cookies.txt)
+      - name: Checkout repository (for cookies.txt)
         uses: actions/checkout@v4
 
       - name: Verify cookies.txt exists
         run: |
           if [ ! -f cookies.txt ]; then
-            echo "❌ cookies.txt not found!"
+            echo "❌ cookies.txt not found! Please commit a valid YouTube cookies file."
             exit 1
           fi
 
       - name: Setup yt-dlp
         uses: AnimMouse/setup-yt-dlp@v3
 
-      - name: Extract track names from Spotify URL
+      - name: Extract track info from Spotify URL
         id: extract
         run: |
           URL="${{ github.event.client_payload.url }}"
           REQUEST_ID="${{ github.event.client_payload.request_id }}"
 
           # --flat-playlist: only list playlist items, no DRM check
-          # --print: output a JSON object per line containing name and artist
+          # --dump-json: output a JSON object per line with title and artist
           yt-dlp \
             --flat-playlist \
             --playlist-items 1-50 \
-            --print '{"name":"%(title)s","artist":"%(artist)s"}' \
+            --dump-json \
             --cookies cookies.txt \
             "$URL" > raw.jsonl 2>/dev/null || true
 
-          # Convert JSON lines to a single JSON array, skip empty lines
+          # Build a clean JSON array of {name, artist} objects
           if [ -s raw.jsonl ]; then
-            jq -s '.' raw.jsonl > tracks.json
+            jq -s '[.[] | {name: .title, artist: (.artist // "Unknown")}]' raw.jsonl > tracks.json
           else
             echo '[]' > tracks.json
           fi

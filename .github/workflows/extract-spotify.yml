@@ -1,0 +1,54 @@
+name: Extract Spotify Playlist
+
+on:
+  repository_dispatch:
+    types: [extract-spotify]
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository (for cookies.txt)
+        uses: actions/checkout@v4
+
+      - name: Verify cookies.txt exists
+        run: |
+          if [ ! -f cookies.txt ]; then
+            echo "❌ cookies.txt not found! Please commit a valid YouTube cookies file."
+            exit 1
+          fi
+
+      - name: Setup yt-dlp
+        uses: AnimMouse/setup-yt-dlp@v3
+
+      - name: Extract track info from Spotify URL
+        id: extract
+        run: |
+          URL="${{ github.event.client_payload.url }}"
+          REQUEST_ID="${{ github.event.client_payload.request_id }}"
+
+          # Dump JSON for each track in the playlist (up to 50 tracks, no flat list)
+          yt-dlp \
+            --dump-json \
+            --playlist-items 1-50 \
+            --cookies cookies.txt \
+            --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" \
+            --no-warnings \
+            "$URL" > raw.jsonl
+
+          # Extract title and artist fields and build a clean JSON array
+          jq -s '[.[] | {name: .title, artist: .artist // "Unknown Artist"}]' raw.jsonl > tracks.json
+
+          echo "filename=tracks.json" >> $GITHUB_OUTPUT
+          echo "track_count=$(jq length tracks.json)" >> $GITHUB_OUTPUT
+
+      - name: Create Release with track list
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: "${{ github.event.client_payload.request_id }}"
+          name: "Spotify Playlist Data"
+          files: tracks.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -10,38 +10,41 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout repository (for cookies.txt)
+      - name: Checkout repository (brings cookies.txt)
         uses: actions/checkout@v4
 
       - name: Verify cookies.txt exists
         run: |
           if [ ! -f cookies.txt ]; then
-            echo "❌ cookies.txt not found! Please commit a valid YouTube cookies file."
+            echo "❌ cookies.txt not found!"
             exit 1
           fi
 
       - name: Setup yt-dlp
         uses: AnimMouse/setup-yt-dlp@v3
 
-      - name: Extract track info from Spotify URL
+      - name: Extract track names from Spotify URL
         id: extract
         run: |
           URL="${{ github.event.client_payload.url }}"
           REQUEST_ID="${{ github.event.client_payload.request_id }}"
 
-          # Dump JSON for each track in the playlist (up to 50 tracks, no flat list)
+          # --flat-playlist: only list playlist items, no DRM check
+          # --print: output a JSON object per line containing name and artist
           yt-dlp \
-            --dump-json \
+            --flat-playlist \
             --playlist-items 1-50 \
+            --print '{"name":"%(title)s","artist":"%(artist)s"}' \
             --cookies cookies.txt \
-            --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" \
-            --no-warnings \
-            "$URL" > raw.jsonl
+            "$URL" > raw.jsonl 2>/dev/null || true
 
-          # Extract title and artist fields and build a clean JSON array
-          jq -s '[.[] | {name: .title, artist: .artist // "Unknown Artist"}]' raw.jsonl > tracks.json
+          # Convert JSON lines to a single JSON array, skip empty lines
+          if [ -s raw.jsonl ]; then
+            jq -s '.' raw.jsonl > tracks.json
+          else
+            echo '[]' > tracks.json
+          fi
 
-          echo "filename=tracks.json" >> $GITHUB_OUTPUT
           echo "track_count=$(jq length tracks.json)" >> $GITHUB_OUTPUT
 
       - name: Create Release with track list
